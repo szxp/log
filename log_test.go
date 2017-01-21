@@ -80,24 +80,24 @@ func TestLoggerFlags(t *testing.T) {
 		fields     Fields
 		expected   []*e
 	}{
-		{"no flags", "logger", 0, nil, []*e{&e{"time", rfc3339Re}}},
-		{"std flags", "logger", FlagStd, nil, []*e{&e{"time", rfc3339Re}}},
-		{"rfc3339", "logger", FlagRFC3339, nil, []*e{&e{"time", rfc3339Re}}},
-		{"rfc3339 utc", "logger", FlagRFC3339 | FlagUTC, nil, []*e{&e{"time", rfc3339Re}}},
-		{"unix", "logger", FlagUnix, nil, []*e{&e{"time", unixRe}}},
-		{"unix nano", "logger", FlagUnixNano, nil, []*e{&e{"time", unixRe}}},
-		{"logger name", "duck duck", FlagLogger, nil, []*e{&e{"logger", "duck duck"}}},
-		{"short file line", "logger", FlagShortfile, nil, []*e{&e{"file", shortfileRe}}},
-		{"long file line", "logger", FlagLongfile, nil, []*e{&e{"file", longfileRe}}},
-		{"custom time1", "logger", 0, Fields{"time": "now1"}, []*e{&e{"time", "now1"}}},
-		{"custom time2", "logger", FlagStd, Fields{"time": "now2"}, []*e{&e{"time", "now2"}}},
-		{"custom time3", "logger", FlagRFC3339, Fields{"time": "now3"}, []*e{&e{"time", "now3"}}},
-		{"custom time4", "logger", FlagRFC3339 | FlagUTC, Fields{"time": "now4"}, []*e{&e{"time", "now4"}}},
-		{"custom time5", "logger", FlagUnix, Fields{"time": "now5"}, []*e{&e{"time", "now5"}}},
-		{"custom time6", "logger", FlagUnixNano, Fields{"time": "now6"}, []*e{&e{"time", "now6"}}},
-		{"custom logger name", "monkey", FlagLogger, Fields{"logger": "elephant"}, []*e{&e{"logger", "elephant"}}},
-		{"custom short file line", "logger", FlagShortfile, Fields{"file": "line1"}, []*e{&e{"file", "line1"}}},
-		{"custom long file line", "logger", FlagLongfile, Fields{"file": "line2"}, []*e{&e{"file", "line2"}}},
+		{"no flags", "logger", 0, nil, []*e{{"time", rfc3339Re}}},
+		{"std flags", "logger", FlagStd, nil, []*e{{"time", rfc3339Re}}},
+		{"rfc3339", "logger", FlagRFC3339, nil, []*e{{"time", rfc3339Re}}},
+		{"rfc3339 utc", "logger", FlagRFC3339 | FlagUTC, nil, []*e{{"time", rfc3339Re}}},
+		{"unix", "logger", FlagUnix, nil, []*e{{"time", unixRe}}},
+		{"unix nano", "logger", FlagUnixNano, nil, []*e{{"time", unixRe}}},
+		{"logger name", "duck duck", FlagLogger, nil, []*e{{"logger", "duck duck"}}},
+		{"short file line", "logger", FlagShortfile, nil, []*e{{"file", shortfileRe}}},
+		{"long file line", "logger", FlagLongfile, nil, []*e{{"file", longfileRe}}},
+		{"custom time1", "logger", 0, Fields{"time": "now1"}, []*e{{"time", "now1"}}},
+		{"custom time2", "logger", FlagStd, Fields{"time": "now2"}, []*e{{"time", "now2"}}},
+		{"custom time3", "logger", FlagRFC3339, Fields{"time": "now3"}, []*e{{"time", "now3"}}},
+		{"custom time4", "logger", FlagRFC3339 | FlagUTC, Fields{"time": "now4"}, []*e{{"time", "now4"}}},
+		{"custom time5", "logger", FlagUnix, Fields{"time": "now5"}, []*e{{"time", "now5"}}},
+		{"custom time6", "logger", FlagUnixNano, Fields{"time": "now6"}, []*e{{"time", "now6"}}},
+		{"custom logger name", "monkey", FlagLogger, Fields{"logger": "elephant"}, []*e{{"logger", "elephant"}}},
+		{"custom short file line", "logger", FlagShortfile, Fields{"file": "line1"}, []*e{{"file", "line1"}}},
+		{"custom long file line", "logger", FlagLongfile, Fields{"file": "line2"}, []*e{{"file", "line2"}}},
 	}
 
 	for _, tc := range testCases {
@@ -112,7 +112,7 @@ func TestLoggerFlags(t *testing.T) {
 			for _, e := range tc.expected {
 				actual, ok := spy.fields[e.field]
 				if !ok {
-					t.Fatalf("field not found:", e.field)
+					t.Fatalf("field not found: %s", e.field)
 				}
 
 				if re, ok := e.pattern.(*regexp.Regexp); ok {
