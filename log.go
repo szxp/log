@@ -1,4 +1,4 @@
-// A small structured logging library for Golang.
+// Package log a small structured logging library for Golang.
 package log
 
 import (
