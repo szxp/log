@@ -78,16 +78,25 @@ func TestLoggerFlags(t *testing.T) {
 		testName   string
 		loggerName string
 		flags      int
+		fields     Fields
 		expected   []*e
 	}{
-		{"no flags", "logger", 0, []*e{&e{"time", dateTimeMicroRe}}},
-		{"std flags", "logger", FlagStd, []*e{&e{"time", dateTimeMicroRe}}},
-		{"date", "logger", FlagDate, []*e{&e{"time", dateRe}}},
-		{"date time", "logger", FlagDate | FlagTime, []*e{&e{"time", dateTimeRe}}},
-		{"date time micro", "logger", FlagDate | FlagTime | FlagMicro, []*e{&e{"time", dateTimeMicroRe}}},
-		{"logger name", "duck duck", FlagLogger, []*e{&e{"logger", "duck duck"}}},
-		{"short file line", "logger", FlagShortfile, []*e{&e{"file", shortfileRe}}},
-		{"long file line", "logger", FlagLongfile, []*e{&e{"file", longfileRe}}},
+		{"no flags", "logger", 0, nil, []*e{&e{"time", dateTimeMicroRe}}},
+		{"std flags", "logger", FlagStd, nil, []*e{&e{"time", dateTimeMicroRe}}},
+		{"date", "logger", FlagDate, nil, []*e{&e{"time", dateRe}}},
+		{"date time", "logger", FlagDate | FlagTime, nil, []*e{&e{"time", dateTimeRe}}},
+		{"date time micro", "logger", FlagDate | FlagTime | FlagMicro, nil, []*e{&e{"time", dateTimeMicroRe}}},
+		{"logger name", "duck duck", FlagLogger, nil, []*e{&e{"logger", "duck duck"}}},
+		{"short file line", "logger", FlagShortfile, nil, []*e{&e{"file", shortfileRe}}},
+		{"long file line", "logger", FlagLongfile, nil, []*e{&e{"file", longfileRe}}},
+		{"custom time1", "logger", 0, Fields{"time": "now1"}, []*e{&e{"time", "now1"}}},
+		{"custom time2", "logger", FlagStd, Fields{"time": "now2"}, []*e{&e{"time", "now2"}}},
+		{"custom time3", "logger", FlagDate, Fields{"time": "now3"}, []*e{&e{"time", "now3"}}},
+		{"custom time4", "logger", FlagDate | FlagTime, Fields{"time": "now4"}, []*e{&e{"time", "now4"}}},
+		{"custom time5", "logger", FlagDate | FlagTime | FlagMicro, Fields{"time": "now5"}, []*e{&e{"time", "now5"}}},
+		{"custom logger name", "monkey", FlagLogger, Fields{"logger": "elephant"}, []*e{&e{"logger", "elephant"}}},
+		{"custom short file line", "logger", FlagShortfile, Fields{"file": "line1"}, []*e{&e{"file", "line1"}}},
+		{"custom long file line", "logger", FlagLongfile, Fields{"file": "line2"}, []*e{&e{"file", "line2"}}},
 	}
 
 	for _, tc := range testCases {
@@ -100,7 +109,7 @@ func TestLoggerFlags(t *testing.T) {
 			r.Output("output1", buf)
 
 			l := NewLogger(tc.loggerName, tc.flags, r)
-			l.Log(nil)
+			l.Log(tc.fields)
 
 			obj := make(map[string]interface{})
 			err := json.Unmarshal(buf.Bytes(), &obj)
