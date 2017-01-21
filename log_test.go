@@ -2,8 +2,8 @@ package log
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
+	"io"
 	"regexp"
 	"testing"
 )
@@ -47,9 +47,9 @@ func TestLogRouter(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			r := &Router{}
+			r := NewRouter()
 			buf := &bytes.Buffer{}
-			r.Output("output1", buf)
+			r.Output("output1", buf, nil)
 			r.Log(tc.fields)
 
 			actual := buf.String()
@@ -63,11 +63,11 @@ func TestLogRouter(t *testing.T) {
 func TestLoggerFlags(t *testing.T) {
 	t.Parallel()
 
-	dateRe := regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}$`)
-	dateTimeRe := regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$`)
-	dateTimeMicroRe := regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$`)
+	rfc3339Re := regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[+-][0-9]{2}:[0-9]{2}$`)
+	rfc3339UTCRe := regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$`)
 	shortfileRe := regexp.MustCompile(`log_test.go:[0-9]+$`)
 	longfileRe := regexp.MustCompile(`.+(\\|/)log_test.go:[0-9]+$`)
+	unixRe := regexp.MustCompile(`^[0-9]+$`)
 
 	type e struct {
 		field   string
@@ -77,23 +77,25 @@ func TestLoggerFlags(t *testing.T) {
 	testCases := []struct {
 		testName   string
 		loggerName string
-		flags      int
+		flags      int64
 		fields     Fields
 		expected   []*e
 	}{
-		{"no flags", "logger", 0, nil, []*e{&e{"time", dateTimeMicroRe}}},
-		{"std flags", "logger", FlagStd, nil, []*e{&e{"time", dateTimeMicroRe}}},
-		{"date", "logger", FlagDate, nil, []*e{&e{"time", dateRe}}},
-		{"date time", "logger", FlagDate | FlagTime, nil, []*e{&e{"time", dateTimeRe}}},
-		{"date time micro", "logger", FlagDate | FlagTime | FlagMicro, nil, []*e{&e{"time", dateTimeMicroRe}}},
+		{"no flags", "logger", 0, nil, []*e{&e{"time", rfc3339UTCRe}}},
+		{"std flags", "logger", FlagStd, nil, []*e{&e{"time", rfc3339UTCRe}}},
+		{"rfc3339", "logger", FlagRFC3339, nil, []*e{&e{"time", rfc3339Re}}},
+		{"rfc3339 utc", "logger", FlagRFC3339 | FlagUTC, nil, []*e{&e{"time", rfc3339UTCRe}}},
+		{"unix", "logger", FlagUnix, nil, []*e{&e{"time", unixRe}}},
+		{"unix nano", "logger", FlagUnixNano, nil, []*e{&e{"time", unixRe}}},
 		{"logger name", "duck duck", FlagLogger, nil, []*e{&e{"logger", "duck duck"}}},
 		{"short file line", "logger", FlagShortfile, nil, []*e{&e{"file", shortfileRe}}},
 		{"long file line", "logger", FlagLongfile, nil, []*e{&e{"file", longfileRe}}},
 		{"custom time1", "logger", 0, Fields{"time": "now1"}, []*e{&e{"time", "now1"}}},
 		{"custom time2", "logger", FlagStd, Fields{"time": "now2"}, []*e{&e{"time", "now2"}}},
-		{"custom time3", "logger", FlagDate, Fields{"time": "now3"}, []*e{&e{"time", "now3"}}},
-		{"custom time4", "logger", FlagDate | FlagTime, Fields{"time": "now4"}, []*e{&e{"time", "now4"}}},
-		{"custom time5", "logger", FlagDate | FlagTime | FlagMicro, Fields{"time": "now5"}, []*e{&e{"time", "now5"}}},
+		{"custom time3", "logger", FlagRFC3339, Fields{"time": "now3"}, []*e{&e{"time", "now3"}}},
+		{"custom time4", "logger", FlagRFC3339 | FlagUTC, Fields{"time": "now4"}, []*e{&e{"time", "now4"}}},
+		{"custom time5", "logger", FlagUnix, Fields{"time": "now5"}, []*e{&e{"time", "now5"}}},
+		{"custom time6", "logger", FlagUnixNano, Fields{"time": "now6"}, []*e{&e{"time", "now6"}}},
 		{"custom logger name", "monkey", FlagLogger, Fields{"logger": "elephant"}, []*e{&e{"logger", "elephant"}}},
 		{"custom short file line", "logger", FlagShortfile, Fields{"file": "line1"}, []*e{&e{"file", "line1"}}},
 		{"custom long file line", "logger", FlagLongfile, Fields{"file": "line2"}, []*e{&e{"file", "line2"}}},
@@ -104,28 +106,19 @@ func TestLoggerFlags(t *testing.T) {
 		t.Run(tc.testName, func(t *testing.T) {
 			t.Parallel()
 
-			r := &Router{}
-			buf := &bytes.Buffer{}
-			r.Output("output1", buf)
-
-			l := NewLogger(tc.loggerName, tc.flags, r)
+			spy := &routerSpy{}
+			l := NewLogger(tc.loggerName, tc.flags, spy)
 			l.Log(tc.fields)
 
-			obj := make(map[string]interface{})
-			err := json.Unmarshal(buf.Bytes(), &obj)
-			if err != nil {
-				t.Fatal(err)
-			}
-
 			for _, e := range tc.expected {
-				actual := obj[e.field]
-				if actual == nil {
-					t.Fatalf("field not found: %s", e.field)
+				actual, ok := spy.fields[e.field]
+				if !ok {
+					t.Fatalf("field not found:", e.field)
 				}
 
 				if re, ok := e.pattern.(*regexp.Regexp); ok {
-					if !re.MatchString(fmt.Sprintf("%s", actual)) {
-						t.Fatalf("expected %s, but got %s", re.String(), actual)
+					if !re.MatchString(fmt.Sprintf("%v", actual)) {
+						t.Fatalf("expected %v, but got %v", re.String(), actual)
 					}
 				} else {
 					if actual != e.pattern {
@@ -135,4 +128,15 @@ func TestLoggerFlags(t *testing.T) {
 			}
 		})
 	}
+}
+
+// no goroutine safe
+type routerSpy struct {
+	fields Fields
+}
+
+func (r *routerSpy) Output(id string, w io.Writer, filter Filter) {}
+
+func (r *routerSpy) Log(fields Fields) {
+	r.fields = fields
 }
