@@ -63,8 +63,7 @@ func TestLogRouter(t *testing.T) {
 func TestLoggerFlags(t *testing.T) {
 	t.Parallel()
 
-	rfc3339Re := regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[+-][0-9]{2}:[0-9]{2}$`)
-	rfc3339UTCRe := regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$`)
+	rfc3339Re := regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2})$`)
 	shortfileRe := regexp.MustCompile(`log_test.go:[0-9]+$`)
 	longfileRe := regexp.MustCompile(`.+(\\|/)log_test.go:[0-9]+$`)
 	unixRe := regexp.MustCompile(`^[0-9]+$`)
@@ -81,10 +80,10 @@ func TestLoggerFlags(t *testing.T) {
 		fields     Fields
 		expected   []*e
 	}{
-		{"no flags", "logger", 0, nil, []*e{&e{"time", rfc3339UTCRe}}},
-		{"std flags", "logger", FlagStd, nil, []*e{&e{"time", rfc3339UTCRe}}},
+		{"no flags", "logger", 0, nil, []*e{&e{"time", rfc3339Re}}},
+		{"std flags", "logger", FlagStd, nil, []*e{&e{"time", rfc3339Re}}},
 		{"rfc3339", "logger", FlagRFC3339, nil, []*e{&e{"time", rfc3339Re}}},
-		{"rfc3339 utc", "logger", FlagRFC3339 | FlagUTC, nil, []*e{&e{"time", rfc3339UTCRe}}},
+		{"rfc3339 utc", "logger", FlagRFC3339 | FlagUTC, nil, []*e{&e{"time", rfc3339Re}}},
 		{"unix", "logger", FlagUnix, nil, []*e{&e{"time", unixRe}}},
 		{"unix nano", "logger", FlagUnixNano, nil, []*e{&e{"time", unixRe}}},
 		{"logger name", "duck duck", FlagLogger, nil, []*e{&e{"logger", "duck duck"}}},
