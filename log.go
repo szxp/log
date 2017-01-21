@@ -13,28 +13,24 @@ import (
 
 const (
 	// Bits or'ed together to control what's printed.
-	FlagDate        = 1 << iota                             // the date in UTC
-	FlagTime                                                // the time in UTC
-	FlagMicrosecond                                         // microsecond resolution, assumes FlagTime
-	FlagLongfile                                            // full file name and line number
-	FlagShortfile                                           // final file name element and line number, overrides FlagLongfile
-	FlagLocaltime                                           // if FlagDate or FlagTime is set, use local time rather than UTC
-	FlagStd         = FlagDate | FlagTime | FlagMicrosecond // initial values for the standard logger
+	FlagDate      = 1 << iota                       // the date in UTC
+	FlagTime                                        // the time in UTC
+	FlagMicro                                       // microsecond resolution, assumes FlagTime
+	FlagLogger                                      // include logger's name
+	FlagLongfile                                    // full file name and line number
+	FlagShortfile                                   // final file name element and line number, overrides FlagLongfile
+	FlagLocaltime                                   // if FlagDate or FlagTime is set, use local time rather than UTC
+	FlagStd       = FlagDate | FlagTime | FlagMicro // initial values for the standard logger
 )
 
 const (
-	FieldTime = "time" // time field property name
-	FieldFile = "file" // file field property name
+	FieldTime   = "time"   // time field
+	FieldLogger = "logger" // logger field
+	FieldFile   = "file"   // file field
 )
 
 // DefaultRouter is used by those Loggers which are created without a Router.
 var DefaultRouter = &Router{}
-
-// Logger writes a message.
-type Logger interface {
-	// Log writes a message.
-	Log(fields Fields)
-}
 
 // Fields represents a log message that consists of key-value pairs.
 type Fields map[string]interface{}
@@ -69,21 +65,29 @@ func (f Fields) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// Logger writes a message.
+type Logger interface {
+	// Log writes a message.
+	Log(fields Fields)
+}
+
 // NewLogger returns a new logger.
 //
 // The router will be used to forward the log messages to output Writers.
 // If router is nil the default router will be used instead.
-func NewLogger(flags int, router *Router) Logger {
+func NewLogger(name string, flags int, router *Router) Logger {
 	if flags == 0 {
 		flags = FlagStd
 	}
 	return &logger{
+		name:   name,
 		flags:  flags,
 		router: router,
 	}
 }
 
 type logger struct {
+	name   string
 	flags  int
 	router *Router
 }
@@ -92,7 +96,12 @@ type logger struct {
 func (l *logger) Log(fields Fields) {
 	t := time.Now() // get this early
 
+	if fields == nil {
+		fields = Fields{}
+	}
+
 	l.addTime(fields, t)
+	l.addLogger(fields)
 	l.addFile(fields, 2)
 
 	r := l.router
@@ -103,7 +112,7 @@ func (l *logger) Log(fields Fields) {
 }
 
 func (l *logger) addTime(fields Fields, t time.Time) {
-	// keep custom "time" field
+	// don't override the user's custom "time" field
 	_, ok := fields[FieldTime]
 	if ok || l.flags&(FlagDate|FlagTime) == 0 {
 		return
@@ -132,17 +141,26 @@ func (l *logger) addTime(fields Fields, t time.Time) {
 		buf.WriteString(fmt.Sprintf("%02d:", min))
 		buf.WriteString(fmt.Sprintf("%02d", sec))
 
-		if l.flags&FlagMicrosecond != 0 {
+		if l.flags&FlagMicro != 0 {
 			buf.WriteString(fmt.Sprintf(".%06d", t.Nanosecond()/1e3))
 		}
 	}
 	fields[FieldTime] = buf.String()
 }
 
+func (l *logger) addLogger(fields Fields) {
+	// don't override the user's custom "logger" field
+	_, ok := fields[FieldLogger]
+	if ok || l.flags&FlagLogger == 0 {
+		return
+	}
+	fields[FieldLogger] = l.name
+}
+
 func (l *logger) addFile(fields Fields, calldepth int) {
-	// keep custom "file" field
+	// don't override the user's custom "file" field
 	_, ok := fields[FieldFile]
-	if ok && l.flags&(FlagShortfile|FlagLongfile) == 0 {
+	if ok || l.flags&(FlagShortfile|FlagLongfile) == 0 {
 		return
 	}
 
@@ -212,7 +230,7 @@ func (l *Router) Log(fields Fields) {
 			b, err := json.Marshal(fields)
 			if err != nil {
 				//if onError != nil {
-				//	onError(err, id)
+				//  onError(err, id)
 				//}
 				continue
 			}
@@ -222,7 +240,7 @@ func (l *Router) Log(fields Fields) {
 			writer.write([]byte{'\n'})
 			if writer.err != nil {
 				//if onError != nil {
-				//	onError(writer.err, id)
+				//  onError(writer.err, id)
 				//}
 				continue
 			}

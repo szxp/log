@@ -2,6 +2,9 @@ package log
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
+	"regexp"
 	"testing"
 )
 
@@ -41,7 +44,9 @@ func TestLogRouter(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			r := &Router{}
 			buf := &bytes.Buffer{}
 			r.Output("output1", buf)
@@ -50,6 +55,74 @@ func TestLogRouter(t *testing.T) {
 			actual := buf.String()
 			if actual != tc.expected {
 				t.Fatalf("expected %q, but got: %q", tc.expected, actual)
+			}
+		})
+	}
+}
+
+func TestLoggerFlags(t *testing.T) {
+	t.Parallel()
+
+	dateRe := regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}$`)
+	dateTimeRe := regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$`)
+	dateTimeMicroRe := regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}$`)
+	shortfileRe := regexp.MustCompile(`log_test.go:[0-9]+$`)
+	longfileRe := regexp.MustCompile(`.+(\\|/)log_test.go:[0-9]+$`)
+
+	type e struct {
+		field   string
+		pattern interface{}
+	}
+
+	testCases := []struct {
+		testName   string
+		loggerName string
+		flags      int
+		expected   []*e
+	}{
+		{"no flags", "logger", 0, []*e{&e{"time", dateTimeMicroRe}}},
+		{"std flags", "logger", FlagStd, []*e{&e{"time", dateTimeMicroRe}}},
+		{"date", "logger", FlagDate, []*e{&e{"time", dateRe}}},
+		{"date time", "logger", FlagDate | FlagTime, []*e{&e{"time", dateTimeRe}}},
+		{"date time micro", "logger", FlagDate | FlagTime | FlagMicro, []*e{&e{"time", dateTimeMicroRe}}},
+		{"logger name", "duck duck", FlagLogger, []*e{&e{"logger", "duck duck"}}},
+		{"short file line", "logger", FlagShortfile, []*e{&e{"file", shortfileRe}}},
+		{"long file line", "logger", FlagLongfile, []*e{&e{"file", longfileRe}}},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.testName, func(t *testing.T) {
+			t.Parallel()
+
+			r := &Router{}
+			buf := &bytes.Buffer{}
+			r.Output("output1", buf)
+
+			l := NewLogger(tc.loggerName, tc.flags, r)
+			l.Log(nil)
+
+			obj := make(map[string]interface{})
+			err := json.Unmarshal(buf.Bytes(), &obj)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			for _, e := range tc.expected {
+				actual := obj[e.field]
+				if actual == nil {
+					t.Fatalf("field not found: %s", e.field)
+				}
+
+				if re, ok := e.pattern.(*regexp.Regexp); ok {
+					if !re.MatchString(fmt.Sprintf("%s", actual)) {
+						t.Fatalf("expected %s, but got %s", re.String(), actual)
+					}
+				} else {
+					if actual != e.pattern {
+						t.Fatalf("expected %v, but got %v", e.pattern, actual)
+					}
+				}
 			}
 		})
 	}
