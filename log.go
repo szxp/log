@@ -50,10 +50,10 @@ const (
 )
 
 const (
-	// FieldsTime is the name of the time field.
+	// FieldTime is the name of the time field.
 	FieldTime = "time"
 
-	// FieldsLogger is the name of the logger field.
+	// FieldLogger is the name of the logger field.
 	FieldLogger = "logger"
 
 	// FieldFile is the name of the file field.
@@ -66,7 +66,7 @@ var DefaultRouter Router = &router{}
 // Fields represents a log message.
 type Fields map[string]interface{}
 
-// MarshalJSON marshals this fields into valid JSON.
+// MarshalJSON marshals the fields into valid JSON.
 func (f Fields) MarshalJSON() ([]byte, error) {
 	count := 0
 	size := len(f)
