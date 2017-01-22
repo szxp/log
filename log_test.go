@@ -89,6 +89,7 @@ func TestLoggerFlags(t *testing.T) {
 		{"logger name", "duck duck", FlagLogger, nil, []*e{{"logger", "duck duck"}}},
 		{"short file line", "logger", FlagShortfile, nil, []*e{{"file", shortfileRe}}},
 		{"long file line", "logger", FlagLongfile, nil, []*e{{"file", longfileRe}}},
+		{"rfc3339 logger", "logger", FlagRFC3339 | FlagLogger, nil, []*e{{"time", rfc3339Re}, {"logger", "logger"}}},
 		{"custom time1", "logger", 0, Fields{"time": "now1"}, []*e{{"time", "now1"}}},
 		{"custom time2", "logger", FlagStd, Fields{"time": "now2"}, []*e{{"time", "now2"}}},
 		{"custom time3", "logger", FlagRFC3339, Fields{"time": "now3"}, []*e{{"time", "now3"}}},
