@@ -71,9 +71,9 @@ var DefaultRouter Router = &router{}
 type Fields map[string]interface{}
 
 // value returns the value at the given path.
-func (fields Fields) value(path []string) (interface{}, bool) {
+func (f Fields) value(path []string) (interface{}, bool) {
 	for i, field := range path {
-		v, ok := fields[field]
+		v, ok := f[field]
 		if !ok {
 			return nil, false
 		}
@@ -81,7 +81,7 @@ func (fields Fields) value(path []string) (interface{}, bool) {
 			return v, true
 		}
 
-		fields, ok = v.(Fields)
+		f, ok = v.(Fields)
 		if !ok {
 			return nil, false
 		}
