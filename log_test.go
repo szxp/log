@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestLogRouter(t *testing.T) {
+func TestRouter(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
@@ -139,4 +139,78 @@ func (r *routerSpy) Output(id string, w io.Writer, filter Filter) {}
 
 func (r *routerSpy) Log(fields Fields) {
 	r.fields = fields
+}
+
+func TestFiltersComposite(t *testing.T) {
+	t.Parallel()
+	testCases := []struct {
+		testName string
+		filter   Filter
+		expected bool
+	}{
+		{"and1", And(&mockFilter{false}, &mockFilter{false}), false},
+		{"and2", And(&mockFilter{false}, &mockFilter{true}), false},
+		{"and3", And(&mockFilter{true}, &mockFilter{false}), false},
+		{"and4", And(&mockFilter{true}, &mockFilter{true}), true},
+
+		{"or1", Or(&mockFilter{false}, &mockFilter{false}), false},
+		{"or2", Or(&mockFilter{false}, &mockFilter{true}), true},
+		{"or3", Or(&mockFilter{true}, &mockFilter{false}), true},
+		{"or4", Or(&mockFilter{true}, &mockFilter{true}), true},
+
+		{"not1", Not(&mockFilter{true}), false},
+		{"not2", Not(&mockFilter{false}), true},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.testName, func(t *testing.T) {
+			t.Parallel()
+			match, err := tc.filter.Match(Fields{})
+			if err != nil {
+				t.Fatalf("non nil error: %v", err)
+			}
+			if match != tc.expected {
+				t.Fatalf("expected %v, but got %v", tc.expected, match)
+			}
+		})
+	}
+}
+
+type mockFilter struct {
+	result bool
+}
+
+func (m *mockFilter) Match(fields Fields) (bool, error) {
+	return m.result, nil
+}
+
+func TestFilters(t *testing.T) {
+	t.Parallel()
+	testCases := []struct {
+		testName string
+		filter   Filter
+		fields   Fields
+		expected bool
+	}{
+		{"field exist", FieldExist("time"), Fields{"time": 123}, true},
+		{"field not exist", FieldExist("time2"), Fields{"time": 123}, false},
+
+		{"eq string", Eq("logger", "requestLogger"), Fields{"logger": "requestLogger"}, true},
+		{"not eq string", Eq("logger", "requestLogger2"), Fields{"logger": "requestLogger"}, false},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.testName, func(t *testing.T) {
+			t.Parallel()
+			match, err := tc.filter.Match(tc.fields)
+			if err != nil {
+				t.Fatalf("non nil error: %v", err)
+			}
+			if match != tc.expected {
+				t.Fatalf("expected %v, but got %v", tc.expected, match)
+			}
+		})
+	}
 }

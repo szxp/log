@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 )
@@ -63,8 +64,30 @@ const (
 // DefaultRouter is used by those Loggers which are created without a Router.
 var DefaultRouter Router = &router{}
 
-// Fields represents a log message.
+// Fields represents a log message. Think of it as a JSON object
+// or a key-value map where keys are strings and value can be
+// a number, a string, a bool, an array, a slice, nil or another
+// Fields object.
 type Fields map[string]interface{}
+
+// value returns the value at the given path.
+func (fields Fields) value(path []string) (interface{}, bool) {
+	for i, field := range path {
+		v, ok := fields[field]
+		if !ok {
+			return nil, false
+		}
+		if i == len(path)-1 {
+			return v, true
+		}
+
+		fields, ok = v.(Fields)
+		if !ok {
+			return nil, false
+		}
+	}
+	return nil, false
+}
 
 // MarshalJSON marshals the fields into valid JSON.
 func (f Fields) MarshalJSON() ([]byte, error) {
@@ -249,22 +272,10 @@ type output struct {
 	filter Filter
 }
 
-func (o *output) match(fields Fields) bool {
-	for k, f := range o.filter {
-		if v, ok := fields[k]; !ok || v != f {
-			return false
-		}
-	}
-	return true
-}
-
 // Output registers a Writer in the default Router.
 func Output(id string, w io.Writer, filter Filter) {
 	DefaultRouter.Output(id, w, filter)
 }
-
-// Filter represent filter conditions.
-type Filter map[string]interface{}
 
 // Log writes the message to the registered Writers.
 func (l *router) Log(fields Fields) {
@@ -273,10 +284,6 @@ func (l *router) Log(fields Fields) {
 
 	for _, o := range l.outputs {
 		if o.w != nil {
-			if !o.match(fields) {
-				continue
-			}
-
 			b, err := json.Marshal(fields)
 			if err != nil {
 				//if onError != nil {
@@ -311,4 +318,131 @@ func (w *writer) write(b []byte) {
 	if err != nil {
 		w.err = err
 	}
+}
+
+// Filter represents a filter condition.
+type Filter interface {
+	// Match evaluates the filter.
+	Match(fields Fields) (bool, error)
+}
+
+// FieldExist returns a filter that checks if the given path
+// exists in the log message. Path is a dot-separated field names.
+func FieldExist(path string) Filter {
+	return &fieldExist{strings.Split(path, ".")}
+}
+
+type fieldExist struct {
+	path []string
+}
+
+// Match returns true if the path exists in the log message.
+// Otherwise returns false.
+func (e *fieldExist) Match(fields Fields) (bool, error) {
+	_, ok := fields.value(e.path)
+	if !ok {
+		return false, nil
+	}
+	return true, nil
+}
+
+// Eq returns a filter that checks if the value at the
+// given path is equal to the given value.
+// Path is a dot-separated field names.
+func Eq(path string, value interface{}) Filter {
+	return &eq{strings.Split(path, "."), value}
+}
+
+type eq struct {
+	path  []string
+	value interface{}
+}
+
+// Match returns true if the path exists and the value at
+// that path is equal to the value in this filter.
+func (e *eq) Match(fields Fields) (bool, error) {
+	v, ok := fields.value(e.path)
+	if !ok {
+		return false, nil
+	}
+	//fmt.Printf("%T %+v\n", e.value, e.value)
+	//fmt.Printf("%T %+v\n", v, v)
+	return e.value == v, nil
+}
+
+// And returns a composite filter consisting of multiple
+// filters and-ed together.
+//
+// Filters are evaluated left to right, they are tested
+// for possible "short-circuit" evaluation using the following
+// rules: false && (anything) is short-circuit evaluated to false.
+func And(filters ...Filter) Filter {
+	return &and{filters}
+}
+
+type and struct {
+	filters []Filter
+}
+
+// Match returns true if all of the filters in this composite
+// filter evaluates to true. Otherwise returns false.
+func (a *and) Match(fields Fields) (bool, error) {
+	for _, f := range a.filters {
+		match, err := f.Match(fields)
+		if err != nil {
+			return false, err
+		}
+		if !match {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// Or returns a composite filter consisting of multiple
+// filters or-ed together.
+//
+// Filters are evaluated left to right, they are tested
+// for possible "short-circuit" evaluation using the following
+// rules: true || (anything) is short-circuit evaluated to true.
+func Or(filters ...Filter) Filter {
+	return &or{filters}
+}
+
+type or struct {
+	filters []Filter
+}
+
+// Match returns true if one of the filters in this composite
+// filter evaluates to true. Otherwise returns false.
+func (o *or) Match(fields Fields) (bool, error) {
+	for _, f := range o.filters {
+		match, err := f.Match(fields)
+		if err != nil {
+			return false, err
+		}
+		if match {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// Not returns a composite filter inverting the given filter.
+func Not(filter Filter) Filter {
+	return &not{filter}
+}
+
+type not struct {
+	filter Filter
+}
+
+// Match returns true if the filter in this composite filter
+// evaluates to false. Otherwise returns false.
+func (n *not) Match(fields Fields) (bool, error) {
+	match, err := n.filter.Match(fields)
+	if err != nil {
+		return false, err
+	}
+	return !match, nil
 }
