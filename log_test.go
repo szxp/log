@@ -195,9 +195,13 @@ func TestFilters(t *testing.T) {
 	}{
 		{"field exist", FieldExist("time"), Fields{"time": 123}, true},
 		{"field not exist", FieldExist("time2"), Fields{"time": 123}, false},
+		{"field exist dotpath", FieldExist("user.id"), Fields{"user": Fields{"id": 1}}, true},
+		{"field not exist dotpath", FieldExist("user.username"), Fields{"user": Fields{"id": 1}}, false},
 
 		{"eq string", Eq("logger", "requestLogger"), Fields{"logger": "requestLogger"}, true},
 		{"not eq string", Eq("logger", "requestLogger2"), Fields{"logger": "requestLogger"}, false},
+		{"eq string dotpath", Eq("user.id", 1), Fields{"user": Fields{"id": 1}}, true},
+		{"not eq string dotpath", Eq("user.id", 2), Fields{"user": Fields{"id": 1}}, false},
 	}
 
 	for _, tc := range testCases {

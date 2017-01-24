@@ -385,7 +385,7 @@ type and struct {
 }
 
 // Match returns true if all of the filters in this composite
-// filter evaluates to true. Otherwise returns false.
+// filter evaluate to true. Otherwise returns false.
 func (a *and) Match(fields Fields) (bool, error) {
 	for _, f := range a.filters {
 		match, err := f.Match(fields)
