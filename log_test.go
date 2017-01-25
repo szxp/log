@@ -148,18 +148,18 @@ func TestFiltersComposite(t *testing.T) {
 		filter   Filter
 		expected bool
 	}{
-		{"and1", And(&mockFilter{false}, &mockFilter{false}), false},
-		{"and2", And(&mockFilter{false}, &mockFilter{true}), false},
-		{"and3", And(&mockFilter{true}, &mockFilter{false}), false},
-		{"and4", And(&mockFilter{true}, &mockFilter{true}), true},
+		{"and1", And(&mockFilter{r: false}, &mockFilter{r: false}), false},
+		{"and2", And(&mockFilter{r: false}, &mockFilter{r: true}), false},
+		{"and3", And(&mockFilter{r: true}, &mockFilter{r: false}), false},
+		{"and4", And(&mockFilter{r: true}, &mockFilter{r: true}), true},
 
-		{"or1", Or(&mockFilter{false}, &mockFilter{false}), false},
-		{"or2", Or(&mockFilter{false}, &mockFilter{true}), true},
-		{"or3", Or(&mockFilter{true}, &mockFilter{false}), true},
-		{"or4", Or(&mockFilter{true}, &mockFilter{true}), true},
+		{"or1", Or(&mockFilter{r: false}, &mockFilter{r: false}), false},
+		{"or2", Or(&mockFilter{r: false}, &mockFilter{r: true}), true},
+		{"or3", Or(&mockFilter{r: true}, &mockFilter{r: false}), true},
+		{"or4", Or(&mockFilter{r: true}, &mockFilter{r: true}), true},
 
-		{"not1", Not(&mockFilter{true}), false},
-		{"not2", Not(&mockFilter{false}), true},
+		{"not1", Not(&mockFilter{r: true}), false},
+		{"not2", Not(&mockFilter{r: false}), true},
 	}
 
 	for _, tc := range testCases {
@@ -178,11 +178,16 @@ func TestFiltersComposite(t *testing.T) {
 }
 
 type mockFilter struct {
-	result bool
+	r   bool
+	n   string
+	buf *bytes.Buffer
 }
 
 func (m *mockFilter) Match(fields Fields) (bool, error) {
-	return m.result, nil
+	if m.buf != nil {
+		m.buf.Write([]byte(m.n))
+	}
+	return m.r, nil
 }
 
 func TestFilters(t *testing.T) {
@@ -214,6 +219,80 @@ func TestFilters(t *testing.T) {
 			}
 			if match != tc.expected {
 				t.Fatalf("expected %v, but got %v", tc.expected, match)
+			}
+		})
+	}
+}
+
+func TestAndShortCircuit(t *testing.T) {
+	t.Parallel()
+	testCases := []struct {
+		testName      string
+		filters       []Filter
+		expectedMatch bool
+		expectedOrder string
+	}{
+		{"and1", []Filter{&mockFilter{r: false, n: "A"}, &mockFilter{r: false, n: "B"}}, false, "A"},
+		{"and2", []Filter{&mockFilter{r: false, n: "A"}, &mockFilter{r: true, n: "B"}}, false, "A"},
+		{"and3", []Filter{&mockFilter{r: true, n: "A"}, &mockFilter{r: false, n: "B"}}, false, "AB"},
+		{"and4", []Filter{&mockFilter{r: true, n: "A"}, &mockFilter{r: true, n: "B"}}, true, "AB"},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.testName, func(t *testing.T) {
+			t.Parallel()
+			buf := &bytes.Buffer{}
+			for _, f := range tc.filters {
+				(f.(*mockFilter)).buf = buf
+			}
+
+			match, err := And(tc.filters...).Match(Fields{})
+			if err != nil {
+				t.Fatalf("non nil error: %v", err)
+			}
+			if match != tc.expectedMatch {
+				t.Fatalf("expected %v, but got %v", tc.expectedMatch, match)
+			}
+			if buf.String() != tc.expectedOrder {
+				t.Fatalf("expected %v, but got %v", tc.expectedOrder, buf.String())
+			}
+		})
+	}
+}
+
+func TestOrShortCircuit(t *testing.T) {
+	t.Parallel()
+	testCases := []struct {
+		testName      string
+		filters       []Filter
+		expectedMatch bool
+		expectedOrder string
+	}{
+		{"or1", []Filter{&mockFilter{r: false, n: "A"}, &mockFilter{r: false, n: "B"}}, false, "AB"},
+		{"or2", []Filter{&mockFilter{r: false, n: "A"}, &mockFilter{r: true, n: "B"}}, true, "AB"},
+		{"or3", []Filter{&mockFilter{r: true, n: "A"}, &mockFilter{r: false, n: "B"}}, true, "A"},
+		{"or4", []Filter{&mockFilter{r: true, n: "A"}, &mockFilter{r: true, n: "B"}}, true, "A"},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.testName, func(t *testing.T) {
+			t.Parallel()
+			buf := &bytes.Buffer{}
+			for _, f := range tc.filters {
+				(f.(*mockFilter)).buf = buf
+			}
+
+			match, err := Or(tc.filters...).Match(Fields{})
+			if err != nil {
+				t.Fatalf("non nil error: %v", err)
+			}
+			if match != tc.expectedMatch {
+				t.Fatalf("expected %v, but got %v", tc.expectedMatch, match)
+			}
+			if buf.String() != tc.expectedOrder {
+				t.Fatalf("expected %v, but got %v", tc.expectedOrder, buf.String())
 			}
 		})
 	}

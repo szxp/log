@@ -89,7 +89,12 @@ func (f Fields) value(path []string) (interface{}, bool) {
 	return nil, false
 }
 
-// MarshalJSON marshals the fields into valid JSON.
+// MarshalJSON marshals the fields into a JSON object.
+//
+// When iterating over the field keys, the iteration order
+// is not specified and is not guaranteed to be the
+// same from one iteration to the next. So field keys
+// may appear in any order in the log message.
 func (f Fields) MarshalJSON() ([]byte, error) {
 	count := 0
 	size := len(f)
@@ -132,6 +137,10 @@ type Logger interface {
 // The messages will be forwarded to the router associated with the logger.
 // The router will write the log messages to the registered Writers.
 // If router is nil the default router will be used.
+//
+// The returned Logger can be used simultaneously from multiple goroutines
+// if and only if the Router associated with the Logger
+// can be used simultaneously from multiple goroutines.
 func NewLogger(name string, flags int64, router Router) Logger {
 	if flags == 0 {
 		flags = FlagStd
@@ -149,9 +158,8 @@ type logger struct {
 	router Router
 }
 
-// Log writes a message.
-//
-// The message will be forwarded to the router associated with the logger.
+// Log forwards the fields to the router associated with the logger.
+// If a Router is not set in the Logger then the DefaultRouter will be used.
 func (l *logger) Log(fields Fields) {
 	t := time.Now() // get this early
 
@@ -277,7 +285,13 @@ func Output(id string, w io.Writer, filter Filter) {
 	DefaultRouter.Output(id, w, filter)
 }
 
-// Log writes the message to the registered Writers.
+// Log marshals the fields into a JSON object and
+// writes it to the registered Writers.
+//
+// When iterating over the field keys, the iteration order
+// is not specified and is not guaranteed to be the
+// same from one iteration to the next. So field keys
+// may appear in any order in the log message.
 func (l *router) Log(fields Fields) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
