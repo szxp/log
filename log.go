@@ -1,4 +1,4 @@
-// Package log a small structured logging library for Golang.
+// Package log a structured logging library.
 package log
 
 import (
@@ -13,44 +13,6 @@ import (
 )
 
 const (
-	// FlagRFC3339 adds the textual representation of the time
-	// formatted according to RFC3339 to the message
-	// at the FieldTime key.
-	FlagRFC3339 = 1 << iota
-
-	// FlagUTC configures a logger to use UTC rather than the
-	// local time zone. Assumes FlagRFC3339.
-	FlagUTC
-
-	// FlagUnix adds Unix time (the number of seconds
-	// elapsed since January 1, 1970 UTC) to the message
-	// at the FieldTime key.
-	FlagUnix
-
-	// FlagUnixNano adds Unix time (the number of
-	// nanoseconds elapsed since January 1, 1970 UTC)
-	// to the message at the FieldTime key.
-	// Overrides FlagUnix.
-	FlagUnixNano
-
-	// FlagLogger adds the logger's name to the message
-	// at the FieldLogger key.
-	FlagLogger
-
-	// FlagLongfile adds the full file name and line number
-	// to the message at the FieldFile key.
-	FlagLongfile
-
-	// FlagShortfile adds the final file name element and
-	// line number to the message at the FieldFile key.
-	// Overrides FlagLongfile.
-	FlagShortfile
-
-	// FlagStd is the initial value for logger created without flags.
-	FlagStd = FlagRFC3339 | FlagUTC
-)
-
-const (
 	// FieldTime is the name of the time field.
 	FieldTime = "time"
 
@@ -61,17 +23,30 @@ const (
 	FieldFile = "file"
 )
 
-// DefaultRouter is used by those Loggers which are created without a Router.
+const (
+	// ShortFileLine is a config option,
+	// for the final file name element and line number.
+	ShortFileLine = iota + 1
+
+	// LongFileLine is a config option,
+	// for the full file path and line number.
+	LongFileLine
+)
+
+// DefaultRouter is used by those Loggers which are created
+// without a Router. It can be used simultaneously from
+// multiple goroutines.
 var DefaultRouter Router = &router{}
 
-// Fields represents a log message. Think of it as a JSON object
-// or a key-value map where keys are strings and value can be
-// a number, a string, a bool, an array, a slice, nil or another
+// Fields represents a log message, a key-value map
+// where keys are strings and a value can be a number,
+// a string, a bool, an array, a slice, nil or another
 // Fields object.
 type Fields map[string]interface{}
 
-// value returns the value at the given path.
-func (f Fields) value(path []string) (interface{}, bool) {
+// Value returns the value at the given path.
+// The second return value indicates if the path exists.
+func (f Fields) Value(path []string) (interface{}, bool) {
 	for i, field := range path {
 		v, ok := f[field]
 		if !ok {
@@ -130,36 +105,69 @@ type Logger interface {
 	Log(fields Fields)
 }
 
-// NewLogger returns a new named logger.
+// Config can be used to configure a Logger.
+type Config struct {
+	// Name of the logger. A non empty name will be
+	// added to the log message at the key FieldLogger.
+	//
+	// The value at the key FieldLogger can be overridden
+	// by specifying a custom value at that key.
+	Name string
+
+	// TimeFormat specifies the format of the timestamp.
+	// If non empty, a timestamp in local time zone
+	// according to the specified format will be
+	// added to the log message at the key FieldTime.
+	// Set UTC to true to use UTC rather than the
+	// local time zone.
+	//
+	// The value at the key FieldTime can be overridden
+	// by specifying a custom value at that key.
+	//
+	// See the standard time package for details on how
+	// to define time formats:
+	// https://golang.org/pkg/time/#pkg-constants
+	TimeFormat string
+
+	// UTC configures a logger to use UTC rather than the
+	// local time zone. Assumes a non empty TimeFormat.
+	UTC bool
+
+	// FileLine, if not zero, adds the file name and line
+	// number to the log message at the key FieldFile.
+	//
+	// Use LongFileLine for the full file path and line number.
+	// Use ShortFileLine for the final file name element and
+	// line number.
+	//
+	// The value at the key FieldFile can be overridden
+	// by specifying a custom value at that key.
+	FileLine int
+
+	// Router will forward the log messages to the registered
+	// Writers. If not specified the default router will
+	// be used.
+	Router Router
+}
+
+// NewLogger creates and returns a new logger.
 //
-// Flags or'ed together to control what's printed.
-//
-// The messages will be forwarded to the router associated with the logger.
-// The router will write the log messages to the registered Writers.
-// If router is nil the default router will be used.
-//
-// The returned Logger can be used simultaneously from multiple goroutines
-// if and only if the Router associated with the Logger
-// can be used simultaneously from multiple goroutines.
-func NewLogger(name string, flags int64, router Router) Logger {
-	if flags == 0 {
-		flags = FlagStd
-	}
-	return &logger{
-		name:   name,
-		flags:  flags,
-		router: router,
-	}
+// The returned Logger can be used simultaneously from
+// multiple goroutines if and only if the Router associated
+// with the Logger can be used simultaneously from multiple
+// goroutines.
+func NewLogger(config Config) Logger {
+	// config is a copy, can be stored safely
+	return &logger{config}
 }
 
 type logger struct {
-	name   string
-	flags  int64
-	router Router
+	config Config
 }
 
-// Log forwards the fields to the router associated with the logger.
-// If a Router is not set in the Logger then the DefaultRouter will be used.
+// Log forwards the fields to the router associated with the
+// logger. If the Router is not specified in the Logger
+// the DefaultRouter will be used.
 func (l *logger) Log(fields Fields) {
 	t := time.Now() // get this early
 
@@ -171,7 +179,7 @@ func (l *logger) Log(fields Fields) {
 	l.addLogger(fields)
 	l.addFile(fields, 2)
 
-	r := l.router
+	r := l.config.Router
 	if r == nil {
 		r = DefaultRouter
 	}
@@ -181,37 +189,29 @@ func (l *logger) Log(fields Fields) {
 func (l *logger) addTime(fields Fields, t time.Time) {
 	// don't override the user's custom "time" field
 	_, ok := fields[FieldTime]
-	if ok || l.flags&(FlagRFC3339|FlagUnix|FlagUnixNano) == 0 {
+	if ok || l.config.TimeFormat == "" {
 		return
 	}
 
-	if l.flags&FlagUnixNano != 0 {
-		fields[FieldTime] = t.UnixNano()
-		return
-	} else if l.flags&FlagUnix != 0 {
-		fields[FieldTime] = t.Unix()
-		return
-	}
-
-	if l.flags&FlagUTC != 0 {
+	if l.config.UTC {
 		t = t.UTC()
 	}
-	fields[FieldTime] = t.Format(time.RFC3339)
+	fields[FieldTime] = t.Format(l.config.TimeFormat)
 }
 
 func (l *logger) addLogger(fields Fields) {
 	// don't override the user's custom "logger" field
 	_, ok := fields[FieldLogger]
-	if ok || l.flags&FlagLogger == 0 {
+	if ok || l.config.Name == "" {
 		return
 	}
-	fields[FieldLogger] = l.name
+	fields[FieldLogger] = l.config.Name
 }
 
 func (l *logger) addFile(fields Fields, calldepth int) {
 	// don't override the user's custom "file" field
 	_, ok := fields[FieldFile]
-	if ok || l.flags&(FlagShortfile|FlagLongfile) == 0 {
+	if ok || (l.config.FileLine != ShortFileLine && l.config.FileLine != LongFileLine) {
 		return
 	}
 
@@ -221,7 +221,7 @@ func (l *logger) addFile(fields Fields, calldepth int) {
 		file = "???"
 		line = 0
 	}
-	if l.flags&FlagShortfile != 0 {
+	if l.config.FileLine == ShortFileLine {
 		short := file
 		for i := len(file) - 1; i > 0; i-- {
 			if file[i] == '/' {
@@ -239,14 +239,16 @@ func (l *logger) addFile(fields Fields, calldepth int) {
 type Router interface {
 	// Output registers a Writer where lines should be written to.
 	Output(id string, w io.Writer, filter Filter)
+
 	// Log writes the message to the registered Writers.
 	Log(fields Fields)
 }
 
 // NewRouter returns a new Router.
 //
-// A Router can be used simultaneously from multiple goroutines.
-// It guarantees to serialize access to the Writer.
+// The returned Router can be used simultaneously from
+// multiple goroutines. It guarantees to serialize access
+// to the Writer.
 func NewRouter() Router {
 	return &router{}
 }
@@ -353,7 +355,7 @@ type fieldExist struct {
 // Match returns true if the path exists in the log message.
 // Otherwise returns false.
 func (e *fieldExist) Match(fields Fields) (bool, error) {
-	_, ok := fields.value(e.path)
+	_, ok := fields.Value(e.path)
 	if !ok {
 		return false, nil
 	}
@@ -375,7 +377,7 @@ type eq struct {
 // Match returns true if the path exists and the value at
 // that path is equal to the value in this filter.
 func (e *eq) Match(fields Fields) (bool, error) {
-	v, ok := fields.value(e.path)
+	v, ok := fields.Value(e.path)
 	if !ok {
 		return false, nil
 	}

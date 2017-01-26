@@ -6,6 +6,7 @@ import (
 	"io"
 	"regexp"
 	"testing"
+	"time"
 )
 
 func TestRouter(t *testing.T) {
@@ -60,13 +61,12 @@ func TestRouter(t *testing.T) {
 	}
 }
 
-func TestLoggerFlags(t *testing.T) {
+func TestLogger(t *testing.T) {
 	t.Parallel()
 
 	rfc3339Re := regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2})$`)
 	shortfileRe := regexp.MustCompile(`log_test.go:[0-9]+$`)
 	longfileRe := regexp.MustCompile(`.+(\\|/)log_test.go:[0-9]+$`)
-	unixRe := regexp.MustCompile(`^[0-9]+$`)
 
 	type e struct {
 		field   string
@@ -74,31 +74,21 @@ func TestLoggerFlags(t *testing.T) {
 	}
 
 	testCases := []struct {
-		testName   string
-		loggerName string
-		flags      int64
-		fields     Fields
-		expected   []*e
+		testName string
+		config   Config
+		fields   Fields
+		expected []*e
 	}{
-		{"no flags", "logger", 0, nil, []*e{{"time", rfc3339Re}}},
-		{"std flags", "logger", FlagStd, nil, []*e{{"time", rfc3339Re}}},
-		{"rfc3339", "logger", FlagRFC3339, nil, []*e{{"time", rfc3339Re}}},
-		{"rfc3339 utc", "logger", FlagRFC3339 | FlagUTC, nil, []*e{{"time", rfc3339Re}}},
-		{"unix", "logger", FlagUnix, nil, []*e{{"time", unixRe}}},
-		{"unix nano", "logger", FlagUnixNano, nil, []*e{{"time", unixRe}}},
-		{"logger name", "duck duck", FlagLogger, nil, []*e{{"logger", "duck duck"}}},
-		{"short file line", "logger", FlagShortfile, nil, []*e{{"file", shortfileRe}}},
-		{"long file line", "logger", FlagLongfile, nil, []*e{{"file", longfileRe}}},
-		{"rfc3339 logger", "logger", FlagRFC3339 | FlagLogger, nil, []*e{{"time", rfc3339Re}, {"logger", "logger"}}},
-		{"custom time1", "logger", 0, Fields{"time": "now1"}, []*e{{"time", "now1"}}},
-		{"custom time2", "logger", FlagStd, Fields{"time": "now2"}, []*e{{"time", "now2"}}},
-		{"custom time3", "logger", FlagRFC3339, Fields{"time": "now3"}, []*e{{"time", "now3"}}},
-		{"custom time4", "logger", FlagRFC3339 | FlagUTC, Fields{"time": "now4"}, []*e{{"time", "now4"}}},
-		{"custom time5", "logger", FlagUnix, Fields{"time": "now5"}, []*e{{"time", "now5"}}},
-		{"custom time6", "logger", FlagUnixNano, Fields{"time": "now6"}, []*e{{"time", "now6"}}},
-		{"custom logger name", "monkey", FlagLogger, Fields{"logger": "elephant"}, []*e{{"logger", "elephant"}}},
-		{"custom short file line", "logger", FlagShortfile, Fields{"file": "line1"}, []*e{{"file", "line1"}}},
-		{"custom long file line", "logger", FlagLongfile, Fields{"file": "line2"}, []*e{{"file", "line2"}}},
+		{"rfc3339", Config{TimeFormat: time.RFC3339}, nil, []*e{{"time", rfc3339Re}}},
+		{"rfc3339 utc", Config{TimeFormat: time.RFC3339, UTC: true}, nil, []*e{{"time", rfc3339Re}}},
+		{"logger name", Config{Name: "duck"}, nil, []*e{{"logger", "duck"}}},
+		{"short file line", Config{FileLine: ShortFileLine}, nil, []*e{{"file", shortfileRe}}},
+		{"long file line", Config{FileLine: LongFileLine}, nil, []*e{{"file", longfileRe}}},
+		{"rfc3339 logger", Config{Name: "logger", TimeFormat: time.RFC3339}, nil, []*e{{"time", rfc3339Re}, {"logger", "logger"}}},
+		{"custom time", Config{TimeFormat: time.RFC3339}, Fields{"time": "now1"}, []*e{{"time", "now1"}}},
+		{"custom logger name", Config{Name: "monkey"}, Fields{"logger": "elephant"}, []*e{{"logger", "elephant"}}},
+		{"custom short file line", Config{FileLine: ShortFileLine}, Fields{"file": "line1"}, []*e{{"file", "line1"}}},
+		{"custom long file line", Config{FileLine: LongFileLine}, Fields{"file": "line2"}, []*e{{"file", "line2"}}},
 	}
 
 	for _, tc := range testCases {
@@ -107,7 +97,8 @@ func TestLoggerFlags(t *testing.T) {
 			t.Parallel()
 
 			spy := &routerSpy{}
-			l := NewLogger(tc.loggerName, tc.flags, spy)
+			tc.config.Router = spy
+			l := NewLogger(tc.config)
 			l.Log(tc.fields)
 
 			for _, e := range tc.expected {
