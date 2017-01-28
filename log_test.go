@@ -50,7 +50,7 @@ func TestRouter(t *testing.T) {
 			t.Parallel()
 			r := NewRouter()
 			buf := &bytes.Buffer{}
-			r.Output("output1", buf, nil)
+			r.Output("output1", buf, nil, nil)
 			r.Log(tc.fields)
 
 			actual := buf.String()
@@ -126,7 +126,7 @@ type routerSpy struct {
 	fields Fields
 }
 
-func (r *routerSpy) Output(id string, w io.Writer, filter Filter) {}
+func (r *routerSpy) Output(id string, w io.Writer, formatter Formatter, filter Filter) {}
 
 func (r *routerSpy) Log(fields Fields) {
 	r.fields = fields

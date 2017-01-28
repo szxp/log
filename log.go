@@ -38,6 +38,11 @@ const (
 // multiple goroutines.
 var DefaultRouter Router = &router{}
 
+// DefaultFormatter converts log message into JSON. It is
+// used when there is no formatter associated with a Writer.
+// It can be used simultaneously from multiple goroutines.
+var DefaultFormatter Formatter = &jsonFormatter{}
+
 // Fields represents a log message, a key-value map
 // where keys are strings and a value can be a number,
 // a string, a bool, an array, a slice, nil or another
@@ -237,8 +242,11 @@ func (l *logger) addFile(fields Fields, calldepth int) {
 
 // Router generates lines of output to registered Writers.
 type Router interface {
-	// Output registers a Writer where lines should be written to.
-	Output(id string, w io.Writer, filter Filter)
+	// Output registers a Writer where formatted log
+	// messages should be written to.
+	// Filter can be used to specify which messages
+	// should be written.
+	Output(id string, w io.Writer, formatter Formatter, filter Filter)
 
 	// Log writes the message to the registered Writers.
 	Log(fields Fields)
@@ -256,10 +264,21 @@ func NewRouter() Router {
 type router struct {
 	mu      sync.RWMutex
 	outputs map[string]*output
+	onError func(id string, w io.Writer, err error)
 }
 
 // Output registers a Writer where lines should be written to.
-func (l *router) Output(id string, w io.Writer, filter Filter) {
+//
+// The formatter must be safe for concurrent use by multiple
+// goroutines. If the formatter is nil the DefaultFormatter
+// will be used that converts log messages into JSON.
+//
+// Optional filter can be used to specify which messages
+// should be written.
+//
+// This method can be called with the same id to update the
+// configuration of a registered Writer.
+func (l *router) Output(id string, w io.Writer, formatter Formatter, filter Filter) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -273,18 +292,25 @@ func (l *router) Output(id string, w io.Writer, filter Filter) {
 	}
 
 	r.w = w
+	r.formatter = formatter
+	if r.formatter == nil {
+		r.formatter = DefaultFormatter
+	}
 	r.filter = filter
 	l.outputs[id] = r
 }
 
 type output struct {
-	w      io.Writer
-	filter Filter
+	w         io.Writer
+	formatter Formatter
+	filter    Filter
 }
 
 // Output registers a Writer in the default Router.
-func Output(id string, w io.Writer, filter Filter) {
-	DefaultRouter.Output(id, w, filter)
+// See Router's Output method for details on how to
+// register a Writer.
+func Output(id string, w io.Writer, formatter Formatter, filter Filter) {
+	DefaultRouter.Output(id, w, formatter, filter)
 }
 
 // Log marshals the fields into a JSON object and
@@ -298,13 +324,21 @@ func (l *router) Log(fields Fields) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
-	for _, o := range l.outputs {
+	for id, o := range l.outputs {
 		if o.w != nil {
-			b, err := json.Marshal(fields)
+			if o.filter != nil {
+				match, err := o.filter.Match(fields)
+				if err != nil {
+					l.reportError(id, o.w, err)
+				}
+				if !match {
+					continue
+				}
+			}
+
+			b, err := o.formatter.Format(fields)
 			if err != nil {
-				//if onError != nil {
-				//  onError(err, id)
-				//}
+				l.reportError(id, o.w, err)
 				continue
 			}
 
@@ -312,12 +346,25 @@ func (l *router) Log(fields Fields) {
 			writer.write(b)
 			writer.write([]byte{'\n'})
 			if writer.err != nil {
-				//if onError != nil {
-				//  onError(writer.err, id)
-				//}
+				l.reportError(id, o.w, writer.err)
 				continue
 			}
 		}
+	}
+}
+
+// OnError registers an error handler callback.
+// The callback will be called if an error occurs while writing a log message.
+// The callback will be passed the id of the Writer, th Writer, and the error.
+func (l *router) OnError(f func(id string, w io.Writer, err error)) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.onError = f
+}
+
+func (l *router) reportError(id string, w io.Writer, err error) {
+	if l.onError != nil {
+		l.onError(id, w, err)
 	}
 }
 
@@ -334,6 +381,28 @@ func (w *writer) write(b []byte) {
 	if err != nil {
 		w.err = err
 	}
+}
+
+// Formatter converts a log message into a []byte.
+type Formatter interface {
+	// Format returns a textual representation of the fields as a []byte.
+	Format(fields Fields) ([]byte, error)
+}
+
+type jsonFormatter struct{}
+
+// NewJSONFormatter returns a new Formatter that converts
+// a log message into JSON.
+//
+// The returned Formatter is safe for concurrent use by
+// multiple goroutines.
+func NewJSONFormatter() Formatter {
+	return &jsonFormatter{}
+}
+
+// Format returns the fields as a valid JSON.
+func (f *jsonFormatter) Format(fields Fields) ([]byte, error) {
+	return json.Marshal(fields)
 }
 
 // Filter represents a filter condition.
