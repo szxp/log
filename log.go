@@ -320,6 +320,11 @@ type Router interface {
 
 	// Log writes the message to the registered Writers.
 	Log(fields Fields)
+
+	// OnError registers an error handler callback.
+	// The callback will be called if an error occurs while writing a log message.
+	// The callback will be passed the id of the Writer, the Writer, and the error.
+	OnError(f func(id string, w io.Writer, err error))
 }
 
 // NewRouter returns a new Router.
@@ -425,7 +430,7 @@ func (l *router) Log(fields Fields) {
 
 // OnError registers an error handler callback.
 // The callback will be called if an error occurs while writing a log message.
-// The callback will be passed the id of the Writer, th Writer, and the error.
+// The callback will be passed the id of the Writer, the Writer, and the error.
 func (l *router) OnError(f func(id string, w io.Writer, err error)) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
