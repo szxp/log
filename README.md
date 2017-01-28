@@ -5,7 +5,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/szxp/log)](https://goreportcard.com/report/github.com/szxp/log)
 
 # log
-A small structured logging library for Golang
+A small structured logging library for Golang.
 [Documentation is available at GoDoc](https://godoc.org/github.com/szxp/log).
 
 
