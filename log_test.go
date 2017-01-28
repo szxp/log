@@ -132,6 +132,8 @@ func (r *routerSpy) Log(fields Fields) {
 	r.fields = fields
 }
 
+func (r *routerSpy) OnError(f func(id string, w io.Writer, err error)) {}
+
 func TestFiltersComposite(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
