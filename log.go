@@ -1,16 +1,16 @@
 // Package log a structured logging library.
 //
 // Example:
-// package main
+//  package main
 //
-// import (
+//  import (
 // 	"fmt"
 // 	"github.com/szxp/log"
 // 	"os"
 // 	"time"
-// )
+//  )
 //
-// func main() {
+//  func main() {
 // 	// open logfile
 // 	logfile, err := os.OpenFile("logfile", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0777)
 // 	if err != nil {
