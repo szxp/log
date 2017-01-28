@@ -68,7 +68,7 @@
 // 	// Output in logfile:
 // 	// {"activated":true,"projects":["p1","p2","p3"],"time":"2017-01-28T19:49:16Z","logger":"loggername","file":"example.go:45","level":"info","user":{"id":1,"username":"admin"}}
 // 	// {"level":"debug","details":"...","time":"2017-01-28T19:49:16Z","logger":"loggername","file":"example.go:50"}
-// }
+//  }
 package log
 
 import (
