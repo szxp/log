@@ -6,6 +6,7 @@
 
 # log
 A small structured logging library for Golang
+[Documentation is available at GoDoc](https://godoc.org/github.com/szxp/log).
 
 
 ## Example
