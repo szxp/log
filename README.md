@@ -8,6 +8,10 @@
 A small structured logging library for Golang.
 [Documentation is available at GoDoc](https://godoc.org/github.com/szxp/log).
 
+## Features
+* Only standard library dependencies
+* Output configurations can be modified at runtime
+* Default formatter formats log messages as JSON encoded string. Custom formatters can be used. 
 
 ## Example
 ```go
