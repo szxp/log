@@ -1,4 +1,4 @@
-// Package log a structured logging library.
+// Package log is a structured logging library.
 //
 // Example:
 //  package main
