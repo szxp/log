@@ -20,11 +20,11 @@
 // 	defer logfile.Close()
 //
 // 	// register stdout with filtering in the default Router
-// 	log.Output("stdout", os.Stdout, nil, log.And(
-// 		log.Eq("user.id", 1),
-// 		log.FieldExist("projects")))
+// 	// everything that is not a debug message will be written to stdout
+// 	log.Output("stdout", os.Stdout, nil, log.Not(log.Eq("level", "debug")))
 //
 // 	// register a logfile in the default Router
+// 	// everything without filtering goes into the logfile
 // 	log.Output("mylogfile", logfile, nil, nil)
 //
 // 	// create a logger
@@ -67,7 +67,7 @@
 //
 // 	// Output in logfile:
 // 	// {"activated":true,"projects":["p1","p2","p3"],"time":"2017-01-28T19:49:16Z","logger":"loggername","file":"example.go:45","level":"info","user":{"id":1,"username":"admin"}}
-// 	// {"level":"debug","details":"...","time":"2017-01-28T19:49:16Z","logger":"loggername","file":"example.go:50"}
+// 	// {"details":"...","time":"2017-01-28T19:49:16Z","logger":"loggername","file":"example.go:50"}
 //  }
 package log
 
@@ -488,6 +488,9 @@ type Filter interface {
 
 // FieldExist returns a filter that checks if the given path
 // exists in the log message. Path is a dot-separated field names.
+//
+// Example:
+//  log.FieldExist("user")
 func FieldExist(path string) Filter {
 	return &fieldExist{strings.Split(path, ".")}
 }
@@ -509,6 +512,10 @@ func (e *fieldExist) Match(fields Fields) (bool, error) {
 // Eq returns a filter that checks if the value at the
 // given path is equal to the given value.
 // Path is a dot-separated field names.
+//
+// Example:
+//  log.Eq("user.id", 1)
+//  log.Not(log.Eq("level", "debug"))
 func Eq(path string, value interface{}) Filter {
 	return &eq{strings.Split(path, "."), value}
 }
@@ -536,6 +543,12 @@ func (e *eq) Match(fields Fields) (bool, error) {
 // Filters are evaluated left to right, they are tested
 // for possible "short-circuit" evaluation using the following
 // rules: false && (anything) is short-circuit evaluated to false.
+//
+// Example:
+//  log.And(
+//    log.Eq("user.id", 1),
+//    log.Eq("level", "trace")
+//  )
 func And(filters ...Filter) Filter {
 	return &and{filters}
 }
@@ -565,6 +578,12 @@ func (a *and) Match(fields Fields) (bool, error) {
 // Filters are evaluated left to right, they are tested
 // for possible "short-circuit" evaluation using the following
 // rules: true || (anything) is short-circuit evaluated to true.
+//
+// Example:
+//  log.Or(
+//    log.Eq("username", "admin"),
+//    log.Eq("username", "bot")
+//  )
 func Or(filters ...Filter) Filter {
 	return &or{filters}
 }
@@ -589,6 +608,9 @@ func (o *or) Match(fields Fields) (bool, error) {
 }
 
 // Not returns a composite filter inverting the given filter.
+//
+// Example:
+//  log.Not(log.Eq("user.id", 1))
 func Not(filter Filter) Filter {
 	return &not{filter}
 }

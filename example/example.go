@@ -17,11 +17,11 @@ func main() {
 	defer logfile.Close()
 
 	// register stdout with filtering in the default Router
-	log.Output("stdout", os.Stdout, nil, log.And(
-		log.Eq("user.id", 1),
-		log.FieldExist("projects")))
+	// everything that is not a debug message will be written to stdout
+	log.Output("stdout", os.Stdout, nil, log.Not(log.Eq("level", "debug")))
 
 	// register a logfile in the default Router
+	// everything without filtering goes into the logfile
 	log.Output("mylogfile", logfile, nil, nil)
 
 	// create a logger
@@ -49,7 +49,7 @@ func main() {
 		"details": "...",
 	})
 
-	// update output configurations
+	// update output configurations at runtime
 	// for example disable logging by setting a nil Writer
 	log.Output("stdout", nil, nil, nil)
 	log.Output("mylogfile", nil, nil, nil)
