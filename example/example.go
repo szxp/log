@@ -60,9 +60,9 @@ func main() {
 	log.Output("stdout", os.Stdout, nil, nil)
 
 	// Output on Stdout:
-	// {"activated":true,"file":"example.go:51","level":"info","logger":"loggername","projects":["p1","p2","p3"],"time":"2017-02-03T21:15:45Z","user":{"username":"admin","id":1}}
+	// {"activated":true,"file":"example.go:51","level":"info","logger":"loggername","projects":["p1","p2","p3"],"time":"2017-02-03T21:43:23Z","user":{"id":1,"username":"admin"}}
 
 	// Output in logfile:
-	// {"activated":true,"file":"example.go:51","level":"info","logger":"loggername","projects":["p1","p2","p3"],"time":"2017-02-03T21:15:45Z","user":{"id":1,"username":"admin"}}
-	// {"details":"...","file":"example.go:56","level":"debug","logger":"loggername","time":"2017-02-03T21:15:45Z"}
+	// {"activated":true,"file":"example.go:51","level":"info","logger":"loggername","projects":["p1","p2","p3"],"time":"2017-02-03T21:43:23Z","user":{"id":1,"username":"admin"}}
+	// {"details":"...","file":"example.go:56","level":"debug","logger":"loggername","time":"2017-02-03T21:43:23Z"}
 }
