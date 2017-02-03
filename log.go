@@ -33,7 +33,7 @@
 // 		TimeFormat: time.RFC3339,      // optional, format timestamp
 // 		UTC:        true,              // optional, use UTC rather than local time zone
 // 		FileLine:   log.ShortFileLine, // optional, include file and line number
-// 		SortFields: true,              // optional, prevents keys to appear in any order
+// 		SortFields: true,              // optional, keys will be sorted in increasing order
 // 		Router:     nil,               // optional, defaults to log.DefaultRouter
 // 	})
 //
@@ -250,10 +250,8 @@ type Config struct {
 	FileLine int
 
 	// SortFields indicates if the keys in the Fields
-	// object should be sorted when marshaling the Fields
-	// object into JSON. It prevents the field keys to
-	// appear in any order in the final JSON encoded log
-	// message.
+	// object should be sorted in increasing order
+	// when marshaling the Fields object into JSON.
 	//
 	// The option can be overridden by providing a "_sort"
 	// key with a bool value in the Fields object.
@@ -441,11 +439,6 @@ func Output(id string, w io.Writer, formatter Formatter, filter Filter) {
 
 // Log marshals the fields into a JSON object and
 // writes it to the registered Writers.
-//
-// When iterating over the field keys, the iteration order
-// is not specified and is not guaranteed to be the
-// same from one iteration to the next. So field keys
-// may appear in any order in the log message.
 func (l *router) Log(fields Fields) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
