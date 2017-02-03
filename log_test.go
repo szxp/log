@@ -85,6 +85,8 @@ func TestLogger(t *testing.T) {
 		{"short file line", Config{FileLine: ShortFileLine}, nil, []*e{{"file", shortfileRe}}},
 		{"long file line", Config{FileLine: LongFileLine}, nil, []*e{{"file", longfileRe}}},
 		{"rfc3339 logger", Config{Name: "logger", TimeFormat: time.RFC3339}, nil, []*e{{"time", rfc3339Re}, {"logger", "logger"}}},
+		{"sort fields1", Config{SortFields: true}, nil, []*e{{"_sort", true}}},
+		{"sort fields2", Config{SortFields: false}, nil, []*e{{"_sort", false}}},
 		{"custom time", Config{TimeFormat: time.RFC3339}, Fields{"time": "now1"}, []*e{{"time", "now1"}}},
 		{"custom logger name", Config{Name: "monkey"}, Fields{"logger": "elephant"}, []*e{{"logger", "elephant"}}},
 		{"custom short file line", Config{FileLine: ShortFileLine}, Fields{"file": "line1"}, []*e{{"file", "line1"}}},

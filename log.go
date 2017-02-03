@@ -29,11 +29,12 @@
 //
 // 	// create a logger
 // 	logger := log.NewLogger(log.Config{
-// 		Name:       "loggername",      // optional
-// 		TimeFormat: time.RFC3339,      // optional
-// 		UTC:        true,              // optional
-// 		FileLine:   log.ShortFileLine, // optional
-// 		Router:     nil,               // optional, if nil the log.DefaultRouter will be used
+// 		Name:       "loggername",      // optional, name of the logger
+// 		TimeFormat: time.RFC3339,      // optional, format timestamp
+// 		UTC:        true,              // optional, use UTC rather than local time zone
+// 		FileLine:   log.ShortFileLine, // optional, include file and line number
+// 		SortFields: true,              // optional, prevents keys to appear in any order
+// 		Router:     nil,               // optional, defaults to log.DefaultRouter
 // 	})
 //
 // 	// produce some log messages
@@ -52,22 +53,16 @@
 // 		"details": "...",
 // 	})
 //
-// 	// update output configurations
-// 	// for example disable logging by setting a nil Writer
-// 	log.Output("stdout", nil, nil, nil)
-// 	log.Output("mylogfile", nil, nil, nil)
-//
-// 	// this message will be never logged
-// 	logger.Log(log.Fields{
-// 		"neverLogged": 1,
-// 	})
+// 	// update output configurations at runtime
+// 	// for example disable filtering on Stdout
+// 	log.Output("stdout", os.Stdout, nil, nil)
 //
 // 	// Output on Stdout:
-// 	// {"activated":true,"projects":["p1","p2","p3"],"time":"2017-01-28T19:48:38Z","logger":"loggername","file":"example.go:45","level":"info","user":{"id":1,"username":"admin"}}
+// 	// {"activated":true,"file":"example.go:51","level":"info","logger":"loggername","projects":["p1","p2","p3"],"time":"2017-02-03T21:15:45Z","user":{"username":"admin","id":1}}
 //
 // 	// Output in logfile:
-// 	// {"activated":true,"projects":["p1","p2","p3"],"time":"2017-01-28T19:49:16Z","logger":"loggername","file":"example.go:45","level":"info","user":{"id":1,"username":"admin"}}
-// 	// {"details":"...","time":"2017-01-28T19:49:16Z","logger":"loggername","file":"example.go:50"}
+// 	// {"activated":true,"file":"example.go:51","level":"info","logger":"loggername","projects":["p1","p2","p3"],"time":"2017-02-03T21:15:45Z","user":{"id":1,"username":"admin"}}
+// 	// {"details":"...","file":"example.go:56","level":"debug","logger":"loggername","time":"2017-02-03T21:15:45Z"}
 //  }
 package log
 
@@ -77,6 +72,7 @@ import (
 	"fmt"
 	"io"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -91,6 +87,11 @@ const (
 
 	// FieldFile is the name of the file field.
 	FieldFile = "file"
+
+	// FieldSort is the name of the field that indicates
+	// if the keys should be sorted in the JSON encoded
+	// log message.
+	FieldSort = "_sort"
 )
 
 const (
@@ -145,15 +146,34 @@ func (f Fields) Value(path []string) (interface{}, bool) {
 // is not specified and is not guaranteed to be the
 // same from one iteration to the next. So field keys
 // may appear in any order in the log message.
+//
+// Keys that begin with underscore will be skipped.
+//
+// If the Fields object contains a "_sort" key with a true
+// bool value the keys will appear in increasing order
+// in the JSON encoded string.
+//
+// Create a logger with the SortFields config option
+// set to true if you want the keys in all log messages
+// to be sorted.
 func (f Fields) MarshalJSON() ([]byte, error) {
-	count := 0
-	size := len(f)
-
 	buf := &bytes.Buffer{}
 	buf.WriteByte('{')
 
-	for k, v := range f {
-		count++
+	keys := make([]string, 0, len(f))
+	for k := range f {
+		if len(k) > 0 && k[0] != '_' {
+			keys = append(keys, k)
+		}
+	}
+
+	if beSorted, ok := f[FieldSort]; ok && beSorted.(bool) {
+		sort.Strings(keys)
+	}
+
+	size := len(keys)
+	for i, k := range keys {
+		v := f[k]
 		b, err := json.Marshal(k)
 		if err != nil {
 			return nil, err
@@ -166,7 +186,7 @@ func (f Fields) MarshalJSON() ([]byte, error) {
 			return nil, err
 		}
 		buf.Write(b)
-		if count < size {
+		if i < size-1 {
 			buf.WriteByte(',')
 		}
 	}
@@ -219,6 +239,16 @@ type Config struct {
 	// by specifying a custom value at that key.
 	FileLine int
 
+	// SortFields indicates if the keys in the Fields
+	// object should be sorted when marshaling the Fields
+	// object into JSON. It prevents the field keys to
+	// appear in any order in the final JSON encoded log
+	// message.
+	//
+	// The option can be overridden by providing a "_sort"
+	// key with a bool value in the Fields object.
+	SortFields bool
+
 	// Router will forward the log messages to the registered
 	// Writers. If not specified the default router will
 	// be used.
@@ -253,6 +283,7 @@ func (l *logger) Log(fields Fields) {
 	l.addTime(fields, t)
 	l.addLogger(fields)
 	l.addFile(fields, 2)
+	l.sortFields(fields)
 
 	r := l.config.Router
 	if r == nil {
@@ -308,6 +339,16 @@ func (l *logger) addFile(fields Fields, calldepth int) {
 	}
 	buf.WriteString(fmt.Sprintf("%s:%d", file, line))
 	fields[FieldFile] = buf.String()
+}
+
+func (l *logger) sortFields(fields Fields) {
+	key := "_sort"
+	// don't override the user's custom "_sort" config
+	_, ok := fields[key]
+	if ok {
+		return
+	}
+	fields[key] = l.config.SortFields
 }
 
 // Router generates lines of output to registered Writers.

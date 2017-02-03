@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/szxp/log"
+	"io"
 	"os"
 	"time"
 )
@@ -24,13 +25,18 @@ func main() {
 	// everything without filtering goes into the logfile
 	log.Output("mylogfile", logfile, nil, nil)
 
+	log.DefaultRouter.OnError(func(id string, w io.Writer, err error) {
+		fmt.Println(id, " ", err)
+	})
+
 	// create a logger
 	logger := log.NewLogger(log.Config{
-		Name:       "loggername",      // optional
-		TimeFormat: time.RFC3339,      // optional
-		UTC:        true,              // optional
-		FileLine:   log.ShortFileLine, // optional
-		Router:     nil,               // optional, if nil the log.DefaultRouter will be used
+		Name:       "loggername",      // optional, name of the logger
+		TimeFormat: time.RFC3339,      // optional, format timestamp
+		UTC:        true,              // optional, use UTC rather than local time zone
+		FileLine:   log.ShortFileLine, // optional, include file and line number
+		SortFields: true,              // optional, prevents keys to appear in any order
+		Router:     nil,               // optional, defaults to log.DefaultRouter
 	})
 
 	// produce some log messages
@@ -50,19 +56,13 @@ func main() {
 	})
 
 	// update output configurations at runtime
-	// for example disable logging by setting a nil Writer
-	log.Output("stdout", nil, nil, nil)
-	log.Output("mylogfile", nil, nil, nil)
-
-	// this message will be never logged
-	logger.Log(log.Fields{
-		"neverLogged": 1,
-	})
+	// for example disable filtering on Stdout
+	log.Output("stdout", os.Stdout, nil, nil)
 
 	// Output on Stdout:
-	// {"activated":true,"projects":["p1","p2","p3"],"time":"2017-01-28T19:48:38Z","logger":"loggername","file":"example.go:45","level":"info","user":{"id":1,"username":"admin"}}
+	// {"activated":true,"file":"example.go:51","level":"info","logger":"loggername","projects":["p1","p2","p3"],"time":"2017-02-03T21:15:45Z","user":{"username":"admin","id":1}}
 
 	// Output in logfile:
-	// {"activated":true,"projects":["p1","p2","p3"],"time":"2017-01-28T19:49:16Z","logger":"loggername","file":"example.go:45","level":"info","user":{"id":1,"username":"admin"}}
-	// {"level":"debug","details":"...","time":"2017-01-28T19:49:16Z","logger":"loggername","file":"example.go:50"}
+	// {"activated":true,"file":"example.go:51","level":"info","logger":"loggername","projects":["p1","p2","p3"],"time":"2017-02-03T21:15:45Z","user":{"id":1,"username":"admin"}}
+	// {"details":"...","file":"example.go:56","level":"debug","logger":"loggername","time":"2017-02-03T21:15:45Z"}
 }
