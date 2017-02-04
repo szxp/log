@@ -1,69 +1,4 @@
 // Package log is a structured logging library.
-//
-// Example:
-//  package main
-//
-//  import (
-// 	"fmt"
-// 	"github.com/szxp/log"
-// 	"os"
-// 	"time"
-//  )
-//
-//  func main() {
-// 	// open logfile
-// 	logfile, err := os.OpenFile("logfile", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0777)
-// 	if err != nil {
-// 		fmt.Println(err)
-// 		os.Exit(-1)
-// 	}
-// 	defer logfile.Close()
-//
-// 	// register stdout with filtering in the default Router
-// 	// everything that is not a debug message will be written to stdout
-// 	log.Output("stdout", os.Stdout, nil, log.Not(log.Eq("level", "debug")))
-//
-// 	// register a logfile in the default Router
-// 	// everything without filtering goes into the logfile
-// 	log.Output("mylogfile", logfile, nil, nil)
-//
-// 	// create a logger
-// 	logger := log.NewLogger(log.Config{
-// 		Name:       "loggername",      // optional, name of the logger
-// 		TimeFormat: time.RFC3339,      // optional, format timestamp
-// 		UTC:        true,              // optional, use UTC rather than local time zone
-// 		FileLine:   log.ShortFileLine, // optional, include file and line number
-// 		SortFields: true,              // optional, keys will be sorted in increasing order
-// 		Router:     nil,               // optional, defaults to log.DefaultRouter
-// 	})
-//
-// 	// produce some log messages
-// 	logger.Log(log.Fields{
-// 		"level": "info",
-// 		"user": log.Fields{
-// 			"id":       1,
-// 			"username": "admin",
-// 		},
-// 		"activated": true,
-// 		"projects":  []string{"p1", "p2", "p3"},
-// 	})
-//
-// 	logger.Log(log.Fields{
-// 		"level":   "debug",
-// 		"details": "...",
-// 	})
-//
-// 	// update output configurations at runtime
-// 	// for example disable filtering on Stdout
-// 	log.Output("stdout", os.Stdout, nil, nil)
-//
-// 	// Output on Stdout:
-// 	// {"activated":true,"file":"example.go:51","level":"info","logger":"loggername","projects":["p1","p2","p3"],"time":"2017-02-03T21:43:23Z","user":{"id":1,"username":"admin"}}
-//
-// 	// Output in logfile:
-// 	// {"activated":true,"file":"example.go:51","level":"info","logger":"loggername","projects":["p1","p2","p3"],"time":"2017-02-03T21:43:23Z","user":{"id":1,"username":"admin"}}
-// 	// {"details":"...","file":"example.go:56","level":"debug","logger":"loggername","time":"2017-02-03T21:43:23Z"}
-//  }
 package log
 
 import (
@@ -110,7 +45,7 @@ const (
 var DefaultRouter Router = &router{}
 
 // DefaultFormatter converts log message into JSON. It is
-// used when there is no formatter associated with a Writer.
+// used when there is no formatter associated with the io.Writer.
 // It can be used simultaneously from multiple goroutines.
 var DefaultFormatter Formatter = &jsonFormatter{}
 
@@ -263,7 +198,10 @@ type Config struct {
 	Router Router
 }
 
-// NewLogger creates and returns a new logger.
+// NewLogger creates and returns a new logger that forwards
+// the fields to the router associated with the
+// logger. If the Router is not specified in the Logger
+// the DefaultRouter will be used.
 //
 // The returned Logger can be used simultaneously from
 // multiple goroutines if and only if the Router associated
@@ -361,7 +299,7 @@ func (l *logger) sortFields(fields Fields) {
 
 // Router generates lines of output to registered Writers.
 type Router interface {
-	// Output registers a Writer where formatted log
+	// Output registers an io.Writer where formatted log
 	// messages should be written to.
 	// Filter can be used to specify which messages
 	// should be written.
@@ -391,7 +329,7 @@ type router struct {
 	onError func(id string, w io.Writer, err error)
 }
 
-// Output registers a Writer where lines should be written to.
+// Output registers an io.Writer where lines should be written to.
 //
 // The formatter must be safe for concurrent use by multiple
 // goroutines. If the formatter is nil the DefaultFormatter
@@ -428,13 +366,6 @@ type output struct {
 	w         io.Writer
 	formatter Formatter
 	filter    Filter
-}
-
-// Output registers a Writer in the default Router.
-// See Router's Output method for details on how to
-// register a Writer.
-func Output(id string, w io.Writer, formatter Formatter, filter Filter) {
-	DefaultRouter.Output(id, w, formatter, filter)
 }
 
 // Log marshals the fields into a JSON object and
