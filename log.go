@@ -288,13 +288,12 @@ func (l *logger) addFile(fields Fields, calldepth int) {
 }
 
 func (l *logger) sortFields(fields Fields) {
-	key := "_sort"
 	// don't override the user's custom "_sort" config
-	_, ok := fields[key]
+	_, ok := fields[FieldSort]
 	if ok {
 		return
 	}
-	fields[key] = l.config.SortFields
+	fields[FieldSort] = l.config.SortFields
 }
 
 // Router generates lines of output to registered Writers.
