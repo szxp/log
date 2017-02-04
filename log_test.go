@@ -42,6 +42,7 @@ func TestRouter(t *testing.T) {
 			`{"x":[{"key1":"msg1"},{"key2":"msg2"}]}` + "\n"},
 		{"slice_of_mixed", Fields{"x": []interface{}{nil, "msg", 42, 33.6, true, Fields{"key1": "msg1"}}},
 			`{"x":[null,"msg",42,33.6,true,{"key1":"msg1"}]}` + "\n"},
+		{"ignore underscore", Fields{"_ignoreit": "abc"}, `{}` + "\n"},
 	}
 
 	for _, tc := range testCases {
