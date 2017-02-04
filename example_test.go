@@ -27,7 +27,7 @@ func Example() {
 		Name:       "loggername",      // optional, name of the logger
 		UTC:        true,              // optional, use UTC rather than local time zone
 		FileLine:   log.ShortFileLine, // optional, include file and line number
-		SortFields: true,              // optional, prevents keys to appear in any order
+		SortFields: true,              // optional, sort field keys in increasing order
 		Router:     nil,               // optional, defaults to log.DefaultRouter
 	})
 
