@@ -42,12 +42,12 @@ const (
 // DefaultRouter is used by those Loggers which are created
 // without a Router. It can be used simultaneously from
 // multiple goroutines.
-var DefaultRouter Router = &router{}
+var DefaultRouter = &defaultRouter{}
 
-// DefaultFormatter converts log message into JSON. It is
+// DefaultFormatter converts a log message into JSON. It is
 // used when there is no formatter associated with the io.Writer.
 // It can be used simultaneously from multiple goroutines.
-var DefaultFormatter Formatter = &jsonFormatter{}
+var DefaultFormatter Formatter = &JSONFormatter{}
 
 // Fields represents a log message, a key-value map
 // where keys are strings and a value can be a number,
@@ -145,8 +145,8 @@ type Logger interface {
 	Log(fields Fields)
 }
 
-// Config can be used to configure a Logger.
-type Config struct {
+// LoggerConfig can be used to create a new Logger.
+type LoggerConfig struct {
 	// Name of the logger. A non empty name will be
 	// added to the log message at the key FieldLogger.
 	//
@@ -207,13 +207,12 @@ type Config struct {
 // multiple goroutines if and only if the Router associated
 // with the Logger can be used simultaneously from multiple
 // goroutines.
-func NewLogger(config Config) Logger {
-	// config is a copy, can be stored safely
-	return &logger{config}
+func (c LoggerConfig) NewLogger() Logger {
+	return &logger{c}
 }
 
 type logger struct {
-	config Config
+	config LoggerConfig
 }
 
 // Log forwards the fields to the router associated with the
@@ -298,122 +297,120 @@ func (l *logger) sortFields(fields Fields) {
 
 // Router generates lines of output to registered Writers.
 type Router interface {
-	// Output registers an io.Writer where formatted log
-	// messages should be written to.
-	// Filter can be used to specify which messages
-	// should be written.
-	Output(id string, w io.Writer, formatter Formatter, filter Filter)
-
 	// Log writes the message to the registered Writers.
 	Log(fields Fields)
-
-	// OnError registers an error handler callback.
-	// The callback will be called if an error occurs while writing a log message.
-	// The callback will be passed the id of the Writer, the Writer, and the error.
-	OnError(f func(id string, w io.Writer, err error))
 }
 
-// NewRouter returns a new Router.
-//
-// The returned Router can be used simultaneously from
-// multiple goroutines. It guarantees to serialize access
-// to the Writer.
-func NewRouter() Router {
-	return &router{}
+// Output describes an output configuration in the DefaultRouter that
+// formatted log messages will be written to.
+type Output struct {
+	// Id identifies the output configuration. It can
+	// be used to update the configuration later.
+	Id string
+
+	// Writer represents the storage backend that formatted
+	// log messages will be written to.
+	Writer io.Writer
+
+	// Formatter converts a log message into a []byte.
+	// It is optional.
+	//
+	// The formatter must be safe for concurrent use by multiple
+	// goroutines. If the formatter is nil the DefaultFormatter
+	// will be used that converts log messages into a
+	// JSON encoded string.
+	Formatter Formatter
+
+	// Filter specifies which messages should be
+	// written to the io.Writer. It is optional.
+	Filter Filter
 }
 
-type router struct {
-	mu      sync.RWMutex
-	outputs map[string]*output
-	onError func(id string, w io.Writer, err error)
+// Register registers the output configuration in the DefaultRouter.
+func (o Output) Register() {
+	DefaultRouter.output(&o)
 }
 
-// Output registers an io.Writer where lines should be written to.
-//
-// The formatter must be safe for concurrent use by multiple
-// goroutines. If the formatter is nil the DefaultFormatter
-// will be used that converts log messages into JSON.
-//
-// Optional filter can be used to specify which messages
-// should be written.
-//
-// This method can be called with the same id to update the
-// configuration of a registered Writer.
-func (l *router) Output(id string, w io.Writer, formatter Formatter, filter Filter) {
+type defaultRouter struct {
+	mu           sync.RWMutex
+	outputs      map[string]*Output
+	errorHandler func(err error, fields Fields, o Output)
+}
+
+func (l *defaultRouter) output(o *Output) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	if l.outputs == nil {
-		l.outputs = make(map[string]*output)
+		l.outputs = make(map[string]*Output)
 	}
 
-	r, ok := l.outputs[id]
+	out, ok := l.outputs[o.Id]
 	if !ok {
-		r = &output{}
+		out = o
 	}
 
-	r.w = w
-	r.formatter = formatter
-	if r.formatter == nil {
-		r.formatter = DefaultFormatter
+	out.Writer = o.Writer
+	out.Formatter = o.Formatter
+	if out.Formatter == nil {
+		out.Formatter = DefaultFormatter
 	}
-	r.filter = filter
-	l.outputs[id] = r
-}
-
-type output struct {
-	w         io.Writer
-	formatter Formatter
-	filter    Filter
+	out.Filter = o.Filter
+	l.outputs[out.Id] = out
 }
 
 // Log marshals the fields into a JSON object and
 // writes it to the registered Writers.
-func (l *router) Log(fields Fields) {
+func (l *defaultRouter) Log(fields Fields) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
-	for id, o := range l.outputs {
-		if o.w != nil {
-			if o.filter != nil {
-				match, err := o.filter.Match(fields)
+	for _, o := range l.outputs {
+		if o.Writer != nil {
+			if o.Filter != nil {
+				match, err := o.Filter.Match(fields)
 				if err != nil {
-					l.reportError(id, o.w, err)
+					l.reportError(err, fields, o)
 				}
 				if !match {
 					continue
 				}
 			}
 
-			b, err := o.formatter.Format(fields)
+			b, err := o.Formatter.Format(fields)
 			if err != nil {
-				l.reportError(id, o.w, err)
+				l.reportError(err, fields, o)
 				continue
 			}
 
-			writer := &writer{out: o.w}
+			writer := &writer{out: o.Writer}
 			writer.write(b)
 			writer.write([]byte{'\n'})
 			if writer.err != nil {
-				l.reportError(id, o.w, writer.err)
+				l.reportError(writer.err, fields, o)
 				continue
 			}
 		}
 	}
 }
 
-// OnError registers an error handler callback.
-// The callback will be called if an error occurs while writing a log message.
-// The callback will be passed the id of the Writer, the Writer, and the error.
-func (l *router) OnError(f func(id string, w io.Writer, err error)) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.onError = f
+// OnError registers an error handler callback in the DefaultRouter.
+//
+// The callback will be called if an error occurs while writing
+// a log message to an io.Writer.
+func OnError(f func(err error, fields Fields, o Output)) {
+	DefaultRouter.onError(f)
 }
 
-func (l *router) reportError(id string, w io.Writer, err error) {
+func (l *defaultRouter) onError(f func(err error, fields Fields, o Output)) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.errorHandler = f
+}
+
+func (l *defaultRouter) reportError(err error, fields Fields, o *Output) {
 	if l.onError != nil {
-		l.onError(id, w, err)
+		l.errorHandler(err, fields, *o)
 	}
 }
 
@@ -438,19 +435,13 @@ type Formatter interface {
 	Format(fields Fields) ([]byte, error)
 }
 
-type jsonFormatter struct{}
-
-// NewJSONFormatter returns a new Formatter that converts
-// a log message into JSON.
+// JSONFormatter converts a log message into JSON encoded string.
 //
-// The returned Formatter is safe for concurrent use by
-// multiple goroutines.
-func NewJSONFormatter() Formatter {
-	return &jsonFormatter{}
-}
+// JSONFormatter is safe for concurrent use by multiple goroutines.
+type JSONFormatter struct{}
 
 // Format returns the fields as a valid JSON.
-func (f *jsonFormatter) Format(fields Fields) ([]byte, error) {
+func (f *JSONFormatter) Format(fields Fields) ([]byte, error) {
 	return json.Marshal(fields)
 }
 
@@ -462,9 +453,6 @@ type Filter interface {
 
 // FieldExist returns a filter that checks if the given path
 // exists in the log message. Path is a dot-separated field names.
-//
-// Example:
-//  log.FieldExist("user")
 func FieldExist(path string) Filter {
 	return &fieldExist{strings.Split(path, ".")}
 }
@@ -486,10 +474,6 @@ func (e *fieldExist) Match(fields Fields) (bool, error) {
 // Eq returns a filter that checks if the value at the
 // given path is equal to the given value.
 // Path is a dot-separated field names.
-//
-// Example:
-//  log.Eq("user.id", 1)
-//  log.Not(log.Eq("level", "debug"))
 func Eq(path string, value interface{}) Filter {
 	return &eq{strings.Split(path, "."), value}
 }
@@ -517,12 +501,6 @@ func (e *eq) Match(fields Fields) (bool, error) {
 // Filters are evaluated left to right, they are tested
 // for possible "short-circuit" evaluation using the following
 // rules: false && (anything) is short-circuit evaluated to false.
-//
-// Example:
-//  log.And(
-//    log.Eq("user.id", 1),
-//    log.Eq("level", "trace")
-//  )
 func And(filters ...Filter) Filter {
 	return &and{filters}
 }
@@ -552,12 +530,6 @@ func (a *and) Match(fields Fields) (bool, error) {
 // Filters are evaluated left to right, they are tested
 // for possible "short-circuit" evaluation using the following
 // rules: true || (anything) is short-circuit evaluated to true.
-//
-// Example:
-//  log.Or(
-//    log.Eq("username", "admin"),
-//    log.Eq("username", "bot")
-//  )
 func Or(filters ...Filter) Filter {
 	return &or{filters}
 }
@@ -582,9 +554,6 @@ func (o *or) Match(fields Fields) (bool, error) {
 }
 
 // Not returns a composite filter inverting the given filter.
-//
-// Example:
-//  log.Not(log.Eq("user.id", 1))
 func Not(filter Filter) Filter {
 	return &not{filter}
 }
