@@ -395,3 +395,40 @@ func ExampleFieldExist() {
 		Filter: log.FieldExist("user.id"),
 	}.Register()
 }
+
+// Run only this benchmark: go test -bench Logger -run ^$
+func BenchmarkLogger(b *testing.B) {
+	log.Output{
+		Id:        "buf1",
+		Writer:    &bytes.Buffer{},
+		Formatter: &log.JSONFormatter{},
+		Filter:    log.FieldExist("bench"),
+	}.Register()
+
+	logger := log.LoggerConfig{
+		TimeFormat: time.RFC3339,
+		Name:       "loggername",
+		UTC:        true,
+		FileLine:   log.ShortFileLine,
+		SortFields: true,
+		Router:     nil,
+	}.NewLogger()
+
+	fields := log.Fields{
+		"bench": true,
+		"level": "info",
+		"user": log.Fields{
+			"id":       1,
+			"username": "admin",
+		},
+		"activated": true,
+		"projects":  []string{"p1", "p2", "p3"},
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		logger.Log(fields)
+
+	}
+}
