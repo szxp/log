@@ -332,7 +332,7 @@ func (o Output) Register() {
 }
 
 type defaultRouter struct {
-	mu           sync.RWMutex
+	mu           sync.Mutex
 	outputs      map[string]*Output
 	errorHandler func(err error, fields Fields, o Output)
 }
@@ -362,8 +362,8 @@ func (l *defaultRouter) output(o *Output) {
 // Log marshals the fields into a JSON object and
 // writes it to the registered Writers.
 func (l *defaultRouter) Log(fields Fields) {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
 	for _, o := range l.outputs {
 		if o.Writer != nil {
