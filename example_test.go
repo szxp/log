@@ -62,7 +62,7 @@ func Example() {
 		Filter:    nil,
 	}.Register()
 
-	// Output:
+	// Output is something like this:
 	// {"activated":true,"file":"example_test.go:44","level":"info","logger":"loggername","projects":["p1","p2","p3"],"user":{"id":1,"username":"admin"}}
 
 }
