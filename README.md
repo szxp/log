@@ -9,7 +9,7 @@ A small structured logging library for Golang.
 [Documentation is available at GoDoc](https://godoc.org/github.com/szxp/log).
 
 ## Releases
-Master branch is still unstable, but it will be considered stable and production ready after the 1.0 release. Releases after the 1.0 version will always be backward compatible. 
+Master branch is the stable production-ready branch. 
 
 ## Features
 * Only standard library dependencies
